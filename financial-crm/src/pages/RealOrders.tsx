@@ -1,0 +1,311 @@
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { RefreshCw, AlertCircle, Eye, Receipt, RotateCcw, Printer } from 'lucide-react';
+import { Header } from '../components/layout';
+import { Button, Card, PaymentStatusBadge, OrderStatusBadge } from '../components/ui';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '../components/ui';
+import { fetchOrders, ApiOrder, mapEstadoPago, mapEstadoPedido, PaymentStatus, OrderStatus } from '../services/api';
+import { formatDistanceToNow } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { clsx } from 'clsx';
+
+const paymentButtons: { value: PaymentStatus | 'all'; label: string; color: string }[] = [
+  { value: 'all', label: 'Todos', color: 'bg-neutral-100 text-neutral-700' },
+  { value: 'pendiente', label: 'Pendiente', color: 'bg-amber-50 text-amber-700' },
+  { value: 'a_confirmar', label: 'A confirmar', color: 'bg-blue-50 text-blue-700' },
+  { value: 'parcial', label: 'Parcial', color: 'bg-violet-50 text-violet-700' },
+  { value: 'total', label: 'Total', color: 'bg-emerald-50 text-emerald-700' },
+  { value: 'rechazado', label: 'Rechazado', color: 'bg-red-50 text-red-700' },
+];
+
+const orderStatusButtons: { value: OrderStatus | 'all'; label: string; color: string }[] = [
+  { value: 'all', label: 'Todos', color: 'bg-neutral-100 text-neutral-700' },
+  { value: 'pendiente_pago', label: 'Pend. Pago', color: 'bg-amber-50 text-amber-700' },
+  { value: 'a_imprimir', label: 'A Imprimir', color: 'bg-blue-50 text-blue-700' },
+  { value: 'armado', label: 'Armado', color: 'bg-cyan-50 text-cyan-700' },
+  { value: 'retirado', label: 'Retirado', color: 'bg-purple-50 text-purple-700' },
+  { value: 'enviado', label: 'Enviado', color: 'bg-emerald-50 text-emerald-700' },
+  { value: 'en_calle', label: 'En Calle', color: 'bg-orange-50 text-orange-700' },
+];
+
+export function RealOrders() {
+  const navigate = useNavigate();
+  const [orders, setOrders] = useState<ApiOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | 'all'>('all');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<OrderStatus | 'all'>('all');
+
+  const loadOrders = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchOrders();
+      setOrders(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al cargar pedidos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
+  const filteredOrders = useMemo(() => {
+    return orders.filter((order) => {
+      const paymentStatus = mapEstadoPago(order.estado_pago);
+      const orderStatus = mapEstadoPedido(order.estado_pedido);
+
+      const matchesPayment = paymentFilter === 'all' || paymentStatus === paymentFilter;
+      const matchesOrderStatus = orderStatusFilter === 'all' || orderStatus === orderStatusFilter;
+
+      return matchesPayment && matchesOrderStatus;
+    });
+  }, [orders, paymentFilter, orderStatusFilter]);
+
+  const statusCounts = useMemo(() => {
+    return orders.reduce(
+      (acc, order) => {
+        const status = mapEstadoPago(order.estado_pago);
+        acc[status] = (acc[status] || 0) + 1;
+        acc.total += 1;
+        return acc;
+      },
+      { total: 0 } as Record<string, number>
+    );
+  }, [orders]);
+
+  // Contar pedidos pendientes de imprimir
+  const printableStatuses: PaymentStatus[] = ['a_confirmar', 'parcial', 'total'];
+  const pendingPrintCount = useMemo(() => {
+    return orders.filter(
+      (order) =>
+        !order.printed_at &&
+        printableStatuses.includes(mapEstadoPago(order.estado_pago))
+    ).length;
+  }, [orders]);
+
+  const formatCurrency = (amount: number | null) => {
+    if (amount === null) return '-';
+    return new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency: 'ARS',
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const handlePrintAllPending = () => {
+    const ordersToPrint = orders.filter(
+      (order) =>
+        !order.printed_at &&
+        printableStatuses.includes(mapEstadoPago(order.estado_pago))
+    );
+
+    console.log('Imprimiendo pedidos:', ordersToPrint.map(o => o.order_number));
+    alert(`Imprimiendo ${ordersToPrint.length} pedidos pendientes:\n${ordersToPrint.map(o => '#' + o.order_number).join(', ')}`);
+  };
+
+  return (
+    <div className="min-h-screen">
+      <Header
+        title="Pedidos"
+        subtitle={`${statusCounts.total} pedidos en total · ${statusCounts.pendiente || 0} pendientes de pago`}
+        actions={
+          <div className="flex items-center gap-2">
+            {pendingPrintCount > 0 && (
+              <Button
+                variant="secondary"
+                leftIcon={<Printer size={16} />}
+                onClick={handlePrintAllPending}
+              >
+                Imprimir Pendientes ({pendingPrintCount})
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              leftIcon={<RefreshCw size={16} className={loading ? 'animate-spin' : ''} />}
+              onClick={loadOrders}
+              disabled={loading}
+            >
+              Actualizar
+            </Button>
+          </div>
+        }
+      />
+
+      <div className="p-6 space-y-6">
+        {/* Filtros */}
+        <div className="space-y-4">
+          <div>
+            <span className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2 block">Estado de Pago</span>
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0">
+              {paymentButtons.map((btn) => (
+                <button
+                  key={btn.value}
+                  onClick={() => setPaymentFilter(btn.value)}
+                  className={clsx(
+                    'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap',
+                    paymentFilter === btn.value
+                      ? clsx(btn.color, 'ring-2 ring-neutral-900/10')
+                      : 'bg-white text-neutral-600 hover:bg-neutral-50 border border-neutral-200'
+                  )}
+                >
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <span className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2 block">Estado del Pedido</span>
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0">
+              {orderStatusButtons.map((btn) => (
+                <button
+                  key={btn.value}
+                  onClick={() => setOrderStatusFilter(btn.value)}
+                  className={clsx(
+                    'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap',
+                    orderStatusFilter === btn.value
+                      ? clsx(btn.color, 'ring-2 ring-neutral-900/10')
+                      : 'bg-white text-neutral-600 hover:bg-neutral-50 border border-neutral-200'
+                  )}
+                >
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Tabla */}
+        {loading && orders.length === 0 ? (
+          <div className="flex items-center justify-center py-16">
+            <RefreshCw size={32} className="animate-spin text-neutral-400" />
+          </div>
+        ) : error ? (
+          <Card className="text-center py-8">
+            <AlertCircle size={48} className="mx-auto text-red-400 mb-4" />
+            <h3 className="text-lg font-semibold text-neutral-900 mb-2">Error al cargar pedidos</h3>
+            <p className="text-neutral-500 mb-4">{error}</p>
+            <Button onClick={loadOrders}>Reintentar</Button>
+          </Card>
+        ) : filteredOrders.length === 0 ? (
+          <Card className="text-center py-8">
+            <p className="text-neutral-500">No hay pedidos que coincidan con los filtros</p>
+          </Card>
+        ) : (
+          <div className="bg-white rounded-2xl border border-neutral-200/60 shadow-soft overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[100px]">Pedido</TableHead>
+                  <TableHead className="min-w-[140px]">Cliente</TableHead>
+                  <TableHead className="text-right w-[90px]">Total</TableHead>
+                  <TableHead className="text-right w-[90px]">Pagado</TableHead>
+                  <TableHead className="text-center w-[85px]">Pago</TableHead>
+                  <TableHead className="text-center w-[95px]">Estado</TableHead>
+                  <TableHead className="text-center w-[45px]">Comp</TableHead>
+                  <TableHead className="w-[80px]">Fecha</TableHead>
+                  <TableHead className="text-right w-[140px]">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredOrders.map((order) => (
+                  <TableRow
+                    key={order.order_number}
+                    isClickable
+                    onClick={() => navigate(`/real-orders/${order.order_number}`)}
+                  >
+                    <TableCell>
+                      <span className="font-mono text-xs font-medium text-neutral-900">
+                        #{order.order_number}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-sm text-neutral-900 truncate max-w-[160px]">
+                          {order.customer_name || 'Sin nombre'}
+                        </span>
+                        <span className="text-xs text-neutral-500 truncate max-w-[160px]">
+                          {order.customer_email || order.customer_phone || '-'}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-mono text-xs">{formatCurrency(order.monto_tiendanube)}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-mono text-xs">{formatCurrency(order.total_pagado)}</span>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <PaymentStatusBadge status={mapEstadoPago(order.estado_pago)} size="sm" />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <OrderStatusBadge status={mapEstadoPedido(order.estado_pedido)} size="sm" />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <Receipt size={12} className="text-neutral-400" />
+                        <span className="text-xs font-medium text-neutral-600">
+                          {order.comprobantes_count}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-xs text-neutral-500">
+                        {formatDistanceToNow(new Date(order.created_at), { addSuffix: true, locale: es })}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-0.5">
+                        {order.printed_at && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              console.log('Re-imprimiendo:', order.order_number);
+                              alert(`Re-imprimiendo pedido #${order.order_number}`);
+                            }}
+                            className="p-1.5 text-violet-600 hover:text-violet-700 hover:bg-violet-50 rounded-lg transition-colors"
+                            title="Re-imprimir"
+                          >
+                            <RotateCcw size={14} />
+                          </button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/real-orders/${order.order_number}`);
+                          }}
+                          leftIcon={<Eye size={14} />}
+                        >
+                          Ver
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-neutral-500">
+            Mostrando {filteredOrders.length} de {orders.length} pedidos
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}

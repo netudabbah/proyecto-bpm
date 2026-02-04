@@ -1,0 +1,122 @@
+import { NavLink } from 'react-router-dom';
+import { clsx } from 'clsx';
+import {
+  LayoutDashboard,
+  ShoppingCart,
+  Receipt,
+  BarChart3,
+  Settings,
+  Building2,
+  ChevronLeft,
+  ChevronRight,
+  Database,
+  LogOut,
+} from 'lucide-react';
+import { useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+
+interface NavItemProps {
+  to: string;
+  icon: React.ReactNode;
+  label: string;
+  collapsed: boolean;
+}
+
+function NavItem({ to, icon, label, collapsed }: NavItemProps) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        clsx(
+          'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150',
+          'hover:bg-neutral-100',
+          isActive
+            ? 'bg-neutral-900 text-white hover:bg-neutral-800'
+            : 'text-neutral-600',
+          collapsed && 'justify-center px-2'
+        )
+      }
+    >
+      <span className="flex-shrink-0">{icon}</span>
+      {!collapsed && <span className="font-medium text-sm">{label}</span>}
+    </NavLink>
+  );
+}
+
+const navItems = [
+  { to: '/', icon: <LayoutDashboard size={20} />, label: 'Panel' },
+  { to: '/orders', icon: <ShoppingCart size={20} />, label: 'Pedidos (Demo)' },
+  { to: '/real-orders', icon: <Database size={20} />, label: 'Pedidos (BD)' },
+  { to: '/receipts', icon: <Receipt size={20} />, label: 'Comprob. (Demo)' },
+  { to: '/real-receipts', icon: <Receipt size={20} />, label: 'Comprob. (BD)' },
+  { to: '/analytics', icon: <BarChart3 size={20} />, label: 'Estadísticas' },
+  { to: '/settings', icon: <Settings size={20} />, label: 'Configuración' },
+];
+
+export function Sidebar() {
+  const [collapsed, setCollapsed] = useState(false);
+  const { logout } = useAuth();
+
+  return (
+    <aside
+      className={clsx(
+        'fixed left-0 top-0 h-full bg-white border-r border-neutral-200/60 z-30',
+        'flex flex-col transition-all duration-300',
+        collapsed ? 'w-[72px]' : 'w-64'
+      )}
+    >
+      <div
+        className={clsx(
+          'flex items-center h-16 px-4 border-b border-neutral-100',
+          collapsed ? 'justify-center' : 'gap-3'
+        )}
+      >
+        <div className="flex items-center justify-center w-9 h-9 bg-neutral-900 rounded-xl">
+          <Building2 size={20} className="text-white" />
+        </div>
+        {!collapsed && (
+          <div className="flex flex-col">
+            <span className="font-semibold text-neutral-900 text-sm">FinOps</span>
+            <span className="text-xs text-neutral-500">Control de Pagos</span>
+          </div>
+        )}
+      </div>
+
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        {navItems.map((item) => (
+          <NavItem key={item.to} {...item} collapsed={collapsed} />
+        ))}
+      </nav>
+
+      <div className="p-3 border-t border-neutral-100">
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className={clsx(
+            'flex items-center gap-2 w-full px-3 py-2 rounded-lg',
+            'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100',
+            'transition-colors duration-150',
+            collapsed && 'justify-center'
+          )}
+        >
+          {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          {!collapsed && <span className="text-sm">Colapsar</span>}
+        </button>
+      </div>
+
+      <div className="p-3 border-t border-neutral-100">
+        <button
+          onClick={logout}
+          className={clsx(
+            'flex items-center gap-2 w-full px-3 py-2 rounded-lg',
+            'text-red-500 hover:text-red-700 hover:bg-red-50',
+            'transition-colors duration-150',
+            collapsed && 'justify-center'
+          )}
+        >
+          <LogOut size={18} />
+          {!collapsed && <span className="text-sm">Cerrar Sesión</span>}
+        </button>
+      </div>
+    </aside>
+  );
+}

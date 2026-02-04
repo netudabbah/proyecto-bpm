@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, AlertCircle, Eye, Banknote, FileText, Download, Calendar } from 'lucide-react';
+import { RefreshCw, AlertCircle, Eye, Banknote, FileText, Download, Calendar, CheckSquare, Square, X } from 'lucide-react';
 import { Header } from '../components/layout';
 import { Button, Card } from '../components/ui';
 import { fetchComprobantes, ApiComprobanteList } from '../services/api';
@@ -10,17 +10,15 @@ import { clsx } from 'clsx';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
-async function downloadPendingAsZip(
+async function downloadComprobantesAsZip(
   comprobantes: ApiComprobanteList[],
-  setDownloading: (v: boolean) => void
+  setDownloading: (v: boolean) => void,
+  folderName: string = 'comprobantes'
 ) {
-  // Descargar comprobantes que están "a_confirmar" (pendientes de revisión)
-  const pendientes = comprobantes.filter(c =>
-    (c.estado === 'pendiente' || c.estado === 'a_confirmar') && c.file_url
-  );
+  const conImagen = comprobantes.filter(c => c.file_url);
 
-  if (pendientes.length === 0) {
-    alert('No hay comprobantes pendientes con imagen para descargar');
+  if (conImagen.length === 0) {
+    alert('No hay comprobantes con imagen para descargar');
     return;
   }
 
@@ -28,9 +26,9 @@ async function downloadPendingAsZip(
 
   try {
     const zip = new JSZip();
-    const folder = zip.folder('comprobantes_pendientes');
+    const folder = zip.folder(folderName);
 
-    const downloadPromises = pendientes.map(async (comp) => {
+    const downloadPromises = conImagen.map(async (comp) => {
       if (!comp.file_url) return;
 
       try {
@@ -53,7 +51,7 @@ async function downloadPendingAsZip(
     await Promise.all(downloadPromises);
 
     const zipBlob = await zip.generateAsync({ type: 'blob' });
-    saveAs(zipBlob, `comprobantes_pendientes_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.zip`);
+    saveAs(zipBlob, `${folderName}_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.zip`);
   } catch (err) {
     console.error('Error creando ZIP:', err);
     alert('Error al crear el archivo ZIP');
@@ -98,15 +96,48 @@ function EstadoBadge({ estado }: { estado: string | null }) {
   );
 }
 
-function ComprobanteCard({ comp, onClick }: { comp: ApiComprobanteList; onClick: () => void }) {
+interface ComprobanteCardProps {
+  comp: ApiComprobanteList;
+  onClick: () => void;
+  selectionMode: boolean;
+  isSelected: boolean;
+  onToggleSelect: () => void;
+}
+
+function ComprobanteCard({ comp, onClick, selectionMode, isSelected, onToggleSelect }: ComprobanteCardProps) {
+  const handleClick = () => {
+    if (selectionMode) {
+      onToggleSelect();
+    } else {
+      onClick();
+    }
+  };
+
   return (
     <div
       className={clsx(
-        'group relative bg-white rounded-2xl border border-neutral-200/60 overflow-hidden',
-        'hover:shadow-medium hover:border-neutral-300/60 transition-all duration-200 cursor-pointer'
+        'group relative bg-white rounded-2xl border overflow-hidden',
+        'hover:shadow-medium transition-all duration-200 cursor-pointer',
+        isSelected
+          ? 'border-blue-500 ring-2 ring-blue-500/20'
+          : 'border-neutral-200/60 hover:border-neutral-300/60'
       )}
-      onClick={onClick}
+      onClick={handleClick}
     >
+      {/* Checkbox de selección */}
+      {selectionMode && (
+        <div className="absolute top-3 left-3 z-10">
+          <div className={clsx(
+            'w-6 h-6 rounded-md flex items-center justify-center transition-colors',
+            isSelected
+              ? 'bg-blue-500 text-white'
+              : 'bg-white/90 border border-neutral-300 text-transparent hover:border-blue-400'
+          )}>
+            {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+          </div>
+        </div>
+      )}
+
       <div className="aspect-[3/4] bg-neutral-100 relative overflow-hidden">
         {comp.file_url ? (
           <img
@@ -123,17 +154,21 @@ function ComprobanteCard({ comp, onClick }: { comp: ApiComprobanteList; onClick:
             )}
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-        <div className="absolute bottom-3 left-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          <Button
-            variant="secondary"
-            size="sm"
-            leftIcon={<Eye size={14} />}
-            className="w-full bg-white/90 backdrop-blur-sm"
-          >
-            Ver Detalle
-          </Button>
-        </div>
+        {!selectionMode && (
+          <>
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+            <div className="absolute bottom-3 left-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <Button
+                variant="secondary"
+                size="sm"
+                leftIcon={<Eye size={14} />}
+                className="w-full bg-white/90 backdrop-blur-sm"
+              >
+                Ver Detalle
+              </Button>
+            </div>
+          </>
+        )}
         {comp.tipo === 'efectivo' && (
           <div className="absolute top-3 right-3">
             <div className="flex items-center gap-1 px-2 py-1 bg-green-500 text-white rounded-lg text-xs font-medium">
@@ -172,6 +207,8 @@ export function RealReceipts() {
   const [fechaFilter, setFechaFilter] = useState<'all' | 'hoy' | 'custom'>('all');
   const [customDate, setCustomDate] = useState<string>('');
   const [downloading, setDownloading] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const loadComprobantes = async () => {
     setLoading(true);
@@ -225,6 +262,40 @@ export function RealReceipts() {
     );
   }, [comprobantes, fechaFilter, customDate]);
 
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllVisible = () => {
+    const visibleIds = filteredComprobantes.filter(c => c.file_url).map(c => c.id);
+    setSelectedIds(new Set(visibleIds));
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setSelectionMode(false);
+  };
+
+  const downloadSelected = () => {
+    const selected = filteredComprobantes.filter(c => selectedIds.has(c.id));
+    downloadComprobantesAsZip(selected, setDownloading, 'comprobantes_seleccionados');
+  };
+
+  const downloadPending = () => {
+    const pendientes = filteredComprobantes.filter(c =>
+      (c.estado === 'pendiente' || c.estado === 'a_confirmar') && c.file_url
+    );
+    downloadComprobantesAsZip(pendientes, setDownloading, 'comprobantes_pendientes');
+  };
+
   return (
     <div className="min-h-screen">
       <Header
@@ -232,22 +303,60 @@ export function RealReceipts() {
         subtitle={`${estadoCounts.total} comprobantes · ${estadoCounts.a_confirmar || 0} a confirmar`}
         actions={
           <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              leftIcon={<Download size={16} className={downloading ? 'animate-bounce' : ''} />}
-              onClick={() => downloadPendingAsZip(filteredComprobantes, setDownloading)}
-              disabled={loading || downloading || (estadoCounts.a_confirmar || 0) === 0}
-            >
-              {downloading ? 'Descargando...' : `Descargar Imágenes (${estadoCounts.a_confirmar || 0})`}
-            </Button>
-            <Button
-              variant="secondary"
-              leftIcon={<RefreshCw size={16} className={loading ? 'animate-spin' : ''} />}
-              onClick={loadComprobantes}
-              disabled={loading}
-            >
-              Actualizar
-            </Button>
+            {selectionMode ? (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={selectAllVisible}
+                >
+                  Seleccionar todos
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<Download size={16} className={downloading ? 'animate-bounce' : ''} />}
+                  onClick={downloadSelected}
+                  disabled={loading || downloading || selectedIds.size === 0}
+                >
+                  {downloading ? 'Descargando...' : `Descargar (${selectedIds.size})`}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<X size={16} />}
+                  onClick={clearSelection}
+                >
+                  Cancelar
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() => setSelectionMode(true)}
+                  leftIcon={<CheckSquare size={16} />}
+                >
+                  Seleccionar
+                </Button>
+                <Button
+                  variant="secondary"
+                  leftIcon={<Download size={16} className={downloading ? 'animate-bounce' : ''} />}
+                  onClick={downloadPending}
+                  disabled={loading || downloading || (estadoCounts.a_confirmar || 0) === 0}
+                >
+                  {downloading ? 'Descargando...' : `Pendientes (${estadoCounts.a_confirmar || 0})`}
+                </Button>
+                <Button
+                  variant="secondary"
+                  leftIcon={<RefreshCw size={16} className={loading ? 'animate-spin' : ''} />}
+                  onClick={loadComprobantes}
+                  disabled={loading}
+                >
+                  Actualizar
+                </Button>
+              </>
+            )}
           </div>
         }
       />
@@ -352,6 +461,9 @@ export function RealReceipts() {
                 key={comp.id}
                 comp={comp}
                 onClick={() => navigate(`/receipts/${comp.id}`)}
+                selectionMode={selectionMode}
+                isSelected={selectedIds.has(comp.id)}
+                onToggleSelect={() => toggleSelect(comp.id)}
               />
             ))}
           </div>

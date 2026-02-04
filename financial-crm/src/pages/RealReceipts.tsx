@@ -1,24 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, AlertCircle, Eye, Banknote, FileText, Download } from 'lucide-react';
+import { RefreshCw, AlertCircle, Eye, Banknote, FileText, Download, Calendar } from 'lucide-react';
 import { Header } from '../components/layout';
 import { Button, Card } from '../components/ui';
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from '../components/ui';
 import { fetchComprobantes, ApiComprobanteList } from '../services/api';
-import { formatDistanceToNow, format } from 'date-fns';
+import { formatDistanceToNow, format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { clsx } from 'clsx';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
-// Función para descargar imágenes de comprobantes pendientes como ZIP
 async function downloadPendingAsZip(
   comprobantes: ApiComprobanteList[],
   setDownloading: (v: boolean) => void
@@ -36,29 +27,20 @@ async function downloadPendingAsZip(
     const zip = new JSZip();
     const folder = zip.folder('comprobantes_pendientes');
 
-    // Descargar cada imagen y agregarla al ZIP
     const downloadPromises = pendientes.map(async (comp) => {
       if (!comp.file_url) return;
 
       try {
         const response = await fetch(comp.file_url);
-        if (!response.ok) {
-          console.error(`Error descargando imagen ${comp.id}:`, response.statusText);
-          return;
-        }
+        if (!response.ok) return;
 
         const blob = await response.blob();
-
-        // Determinar extensión del archivo
         const contentType = response.headers.get('content-type') || '';
         let extension = 'jpg';
         if (contentType.includes('png')) extension = 'png';
         else if (contentType.includes('webp')) extension = 'webp';
-        else if (contentType.includes('gif')) extension = 'gif';
 
-        // Nombre del archivo: pedido_id_monto.jpg
         const fileName = `pedido_${comp.order_number}_comp${comp.id}_$${comp.monto}.${extension}`;
-
         folder?.file(fileName, blob);
       } catch (err) {
         console.error(`Error descargando imagen ${comp.id}:`, err);
@@ -67,7 +49,6 @@ async function downloadPendingAsZip(
 
     await Promise.all(downloadPromises);
 
-    // Generar y descargar el ZIP
     const zipBlob = await zip.generateAsync({ type: 'blob' });
     saveAs(zipBlob, `comprobantes_pendientes_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.zip`);
   } catch (err) {
@@ -109,6 +90,80 @@ function EstadoBadge({ estado }: { estado: string | null }) {
   );
 }
 
+function ComprobanteCard({ comp, onClick }: { comp: ApiComprobanteList; onClick: () => void }) {
+  const formatCurrency = (amount: number | null) => {
+    if (amount === null) return 'N/D';
+    return new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency: 'ARS',
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  return (
+    <div
+      className={clsx(
+        'group relative bg-white rounded-2xl border border-neutral-200/60 overflow-hidden',
+        'hover:shadow-medium hover:border-neutral-300/60 transition-all duration-200 cursor-pointer'
+      )}
+      onClick={onClick}
+    >
+      <div className="aspect-[3/4] bg-neutral-100 relative overflow-hidden">
+        {comp.file_url ? (
+          <img
+            src={comp.file_url}
+            alt="Comprobante"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            {comp.tipo === 'efectivo' ? (
+              <Banknote size={48} className="text-neutral-300" />
+            ) : (
+              <FileText size={48} className="text-neutral-300" />
+            )}
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+        <div className="absolute bottom-3 left-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<Eye size={14} />}
+            className="w-full bg-white/90 backdrop-blur-sm"
+          >
+            Ver Detalle
+          </Button>
+        </div>
+        {comp.tipo === 'efectivo' && (
+          <div className="absolute top-3 right-3">
+            <div className="flex items-center gap-1 px-2 py-1 bg-green-500 text-white rounded-lg text-xs font-medium">
+              <Banknote size={12} />
+              Efectivo
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="p-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-neutral-900">
+            {formatCurrency(comp.monto)}
+          </span>
+          <EstadoBadge estado={comp.estado} />
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-neutral-500">
+            {formatDistanceToNow(new Date(comp.created_at), { addSuffix: true, locale: es })}
+          </span>
+          <span className="text-xs font-mono text-neutral-400">
+            #{comp.order_number}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function RealReceipts() {
   const navigate = useNavigate();
   const [comprobantes, setComprobantes] = useState<ApiComprobanteList[]>([]);
@@ -116,7 +171,7 @@ export function RealReceipts() {
   const [error, setError] = useState<string | null>(null);
   const [estadoFilter, setEstadoFilter] = useState<ComprobanteEstado | 'all'>('all');
   const [tipoFilter, setTipoFilter] = useState<string | 'all'>('all');
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [fechaFilter, setFechaFilter] = useState<'all' | 'hoy'>('all');
   const [downloading, setDownloading] = useState(false);
 
   const loadComprobantes = async () => {
@@ -142,13 +197,18 @@ export function RealReceipts() {
       const matchesTipo = tipoFilter === 'all' ||
         (tipoFilter === 'efectivo' && comp.tipo === 'efectivo') ||
         (tipoFilter === 'transferencia' && comp.tipo !== 'efectivo');
+      const matchesFecha = fechaFilter === 'all' || isToday(new Date(comp.created_at));
 
-      return matchesEstado && matchesTipo;
+      return matchesEstado && matchesTipo && matchesFecha;
     });
-  }, [comprobantes, estadoFilter, tipoFilter]);
+  }, [comprobantes, estadoFilter, tipoFilter, fechaFilter]);
 
   const estadoCounts = useMemo(() => {
-    return comprobantes.reduce(
+    const filtered = fechaFilter === 'hoy'
+      ? comprobantes.filter(c => isToday(new Date(c.created_at)))
+      : comprobantes;
+
+    return filtered.reduce(
       (acc, comp) => {
         acc[comp.estado] = (acc[comp.estado] || 0) + 1;
         acc.total += 1;
@@ -156,16 +216,7 @@ export function RealReceipts() {
       },
       { total: 0 } as Record<string, number>
     );
-  }, [comprobantes]);
-
-  const formatCurrency = (amount: number | null) => {
-    if (amount === null) return '-';
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  }, [comprobantes, fechaFilter]);
 
   return (
     <div className="min-h-screen">
@@ -177,7 +228,7 @@ export function RealReceipts() {
             <Button
               variant="secondary"
               leftIcon={<Download size={16} className={downloading ? 'animate-bounce' : ''} />}
-              onClick={() => downloadPendingAsZip(comprobantes, setDownloading)}
+              onClick={() => downloadPendingAsZip(filteredComprobantes, setDownloading)}
               disabled={loading || downloading || (estadoCounts.pendiente || 0) === 0}
             >
               {downloading ? 'Descargando...' : `Descargar Imágenes (${estadoCounts.pendiente || 0})`}
@@ -197,6 +248,37 @@ export function RealReceipts() {
       <div className="p-6 space-y-6">
         {/* Filtros */}
         <div className="space-y-4">
+          {/* Filtro de fecha */}
+          <div>
+            <span className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2 block">Fecha</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setFechaFilter('all')}
+                className={clsx(
+                  'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap',
+                  fechaFilter === 'all'
+                    ? 'bg-neutral-100 text-neutral-700 ring-2 ring-neutral-900/10'
+                    : 'bg-white text-neutral-600 hover:bg-neutral-50 border border-neutral-200'
+                )}
+              >
+                Todos
+              </button>
+              <button
+                onClick={() => setFechaFilter('hoy')}
+                className={clsx(
+                  'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap flex items-center gap-1.5',
+                  fechaFilter === 'hoy'
+                    ? 'bg-blue-50 text-blue-700 ring-2 ring-blue-900/10'
+                    : 'bg-white text-neutral-600 hover:bg-neutral-50 border border-neutral-200'
+                )}
+              >
+                <Calendar size={14} />
+                Hoy
+              </button>
+            </div>
+          </div>
+
+          {/* Filtro de estado */}
           <div>
             <span className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2 block">Estado</span>
             <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0">
@@ -217,6 +299,7 @@ export function RealReceipts() {
             </div>
           </div>
 
+          {/* Filtro de tipo */}
           <div>
             <span className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2 block">Tipo</span>
             <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0">
@@ -238,7 +321,7 @@ export function RealReceipts() {
           </div>
         </div>
 
-        {/* Tabla */}
+        {/* Grid de comprobantes */}
         {loading && comprobantes.length === 0 ? (
           <div className="flex items-center justify-center py-16">
             <RefreshCw size={32} className="animate-spin text-neutral-400" />
@@ -251,108 +334,21 @@ export function RealReceipts() {
             <Button onClick={loadComprobantes}>Reintentar</Button>
           </Card>
         ) : filteredComprobantes.length === 0 ? (
-          <Card className="text-center py-8">
-            <p className="text-neutral-500">No hay comprobantes que coincidan con los filtros</p>
-          </Card>
+          <div className="text-center py-16">
+            <div className="text-neutral-400 mb-2">No se encontraron comprobantes</div>
+            <p className="text-sm text-neutral-500">
+              Intentá ajustar los filtros
+            </p>
+          </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-neutral-200/60 shadow-soft overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[70px]">ID</TableHead>
-                  <TableHead className="w-[100px]">Pedido</TableHead>
-                  <TableHead className="min-w-[140px]">Cliente</TableHead>
-                  <TableHead className="text-right w-[100px]">Monto</TableHead>
-                  <TableHead className="text-center w-[90px]">Tipo</TableHead>
-                  <TableHead className="text-center w-[100px]">Estado</TableHead>
-                  <TableHead className="w-[100px]">Fecha</TableHead>
-                  <TableHead className="text-right w-[120px]">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredComprobantes.map((comp) => (
-                  <TableRow
-                    key={comp.id}
-                    isClickable
-                    onClick={() => navigate(`/real-receipts/${comp.id}`)}
-                  >
-                    <TableCell>
-                      <span className="font-mono text-xs text-neutral-500">
-                        #{comp.id}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/real-orders/${comp.order_number}`);
-                        }}
-                        className="font-mono text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
-                      >
-                        #{comp.order_number}
-                      </button>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-neutral-900 truncate max-w-[160px] block">
-                        {comp.customer_name || 'Sin nombre'}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <span className="font-mono text-sm font-medium">{formatCurrency(comp.monto)}</span>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        {comp.tipo === 'efectivo' ? (
-                          <>
-                            <Banknote size={14} className="text-green-600" />
-                            <span className="text-xs text-green-700">Efectivo</span>
-                          </>
-                        ) : (
-                          <>
-                            <FileText size={14} className="text-blue-600" />
-                            <span className="text-xs text-blue-700">Transfer.</span>
-                          </>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <EstadoBadge estado={comp.estado} />
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-xs text-neutral-500">
-                        {formatDistanceToNow(new Date(comp.created_at), { addSuffix: true, locale: es })}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {comp.file_url && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedImage(comp.file_url);
-                            }}
-                            className="p-1.5 text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg transition-colors"
-                            title="Ver imagen"
-                          >
-                            <Eye size={16} />
-                          </button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/real-receipts/${comp.id}`);
-                          }}
-                        >
-                          Ver
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+            {filteredComprobantes.map((comp) => (
+              <ComprobanteCard
+                key={comp.id}
+                comp={comp}
+                onClick={() => navigate(`/receipts/${comp.id}`)}
+              />
+            ))}
           </div>
         )}
 
@@ -362,28 +358,6 @@ export function RealReceipts() {
           </span>
         </div>
       </div>
-
-      {/* Modal de imagen */}
-      {selectedImage && (
-        <div
-          className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
-          onClick={() => setSelectedImage(null)}
-        >
-          <div className="relative max-w-4xl max-h-[90vh]">
-            <img
-              src={selectedImage}
-              alt="Comprobante"
-              className="max-w-full max-h-[90vh] object-contain rounded-lg"
-            />
-            <button
-              onClick={() => setSelectedImage(null)}
-              className="absolute top-4 right-4 p-2 bg-white/90 rounded-full hover:bg-white transition-colors"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

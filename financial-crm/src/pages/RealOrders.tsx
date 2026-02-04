@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, AlertCircle, Eye, Receipt, RotateCcw, Printer } from 'lucide-react';
+import { RefreshCw, AlertCircle, Eye, Receipt, RotateCcw, Printer, Calendar } from 'lucide-react';
 import { Header } from '../components/layout';
 import { Button, Card, PaymentStatusBadge, OrderStatusBadge } from '../components/ui';
 import {
@@ -12,7 +12,7 @@ import {
   TableCell,
 } from '../components/ui';
 import { fetchOrders, ApiOrder, mapEstadoPago, mapEstadoPedido, PaymentStatus, OrderStatus } from '../services/api';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { clsx } from 'clsx';
 
@@ -42,6 +42,7 @@ export function RealOrders() {
   const [error, setError] = useState<string | null>(null);
   const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | 'all'>('all');
   const [orderStatusFilter, setOrderStatusFilter] = useState<OrderStatus | 'all'>('all');
+  const [fechaFilter, setFechaFilter] = useState<'all' | 'hoy'>('all');
 
   const loadOrders = async () => {
     setLoading(true);
@@ -67,10 +68,11 @@ export function RealOrders() {
 
       const matchesPayment = paymentFilter === 'all' || paymentStatus === paymentFilter;
       const matchesOrderStatus = orderStatusFilter === 'all' || orderStatus === orderStatusFilter;
+      const matchesFecha = fechaFilter === 'all' || isToday(new Date(order.created_at));
 
-      return matchesPayment && matchesOrderStatus;
+      return matchesPayment && matchesOrderStatus && matchesFecha;
     });
-  }, [orders, paymentFilter, orderStatusFilter]);
+  }, [orders, paymentFilter, orderStatusFilter, fechaFilter]);
 
   const statusCounts = useMemo(() => {
     return orders.reduce(
@@ -145,6 +147,36 @@ export function RealOrders() {
       <div className="p-6 space-y-6">
         {/* Filtros */}
         <div className="space-y-4">
+          {/* Filtro de fecha */}
+          <div>
+            <span className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2 block">Fecha</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setFechaFilter('all')}
+                className={clsx(
+                  'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap',
+                  fechaFilter === 'all'
+                    ? 'bg-neutral-100 text-neutral-700 ring-2 ring-neutral-900/10'
+                    : 'bg-white text-neutral-600 hover:bg-neutral-50 border border-neutral-200'
+                )}
+              >
+                Todos
+              </button>
+              <button
+                onClick={() => setFechaFilter('hoy')}
+                className={clsx(
+                  'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap flex items-center gap-1.5',
+                  fechaFilter === 'hoy'
+                    ? 'bg-blue-50 text-blue-700 ring-2 ring-blue-900/10'
+                    : 'bg-white text-neutral-600 hover:bg-neutral-50 border border-neutral-200'
+                )}
+              >
+                <Calendar size={14} />
+                Hoy
+              </button>
+            </div>
+          </div>
+
           <div>
             <span className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2 block">Estado de Pago</span>
             <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0">
@@ -223,7 +255,7 @@ export function RealOrders() {
                   <TableRow
                     key={order.order_number}
                     isClickable
-                    onClick={() => navigate(`/real-orders/${order.order_number}`)}
+                    onClick={() => navigate(`/orders/${order.order_number}`)}
                   >
                     <TableCell>
                       <span className="font-mono text-xs font-medium text-neutral-900">
@@ -285,7 +317,7 @@ export function RealOrders() {
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigate(`/real-orders/${order.order_number}`);
+                            navigate(`/orders/${order.order_number}`);
                           }}
                           leftIcon={<Eye size={14} />}
                         >

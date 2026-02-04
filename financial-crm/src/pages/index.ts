@@ -1,9 +1,6 @@
 export { Dashboard } from './Dashboard';
-export { Orders } from './Orders';
-export { OrderDetail } from './OrderDetail';
 export { RealOrders } from './RealOrders';
 export { RealOrderDetail } from './RealOrderDetail';
-export { Receipts } from './Receipts';
 export { RealReceipts } from './RealReceipts';
 export { RealReceiptDetail } from './RealReceiptDetail';
 export { Analytics } from './Analytics';

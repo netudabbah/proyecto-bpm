@@ -9,7 +9,6 @@ import {
   Building2,
   ChevronLeft,
   ChevronRight,
-  Database,
   LogOut,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -45,10 +44,8 @@ function NavItem({ to, icon, label, collapsed }: NavItemProps) {
 
 const navItems = [
   { to: '/', icon: <LayoutDashboard size={20} />, label: 'Panel' },
-  { to: '/orders', icon: <ShoppingCart size={20} />, label: 'Pedidos (Demo)' },
-  { to: '/real-orders', icon: <Database size={20} />, label: 'Pedidos (BD)' },
-  { to: '/receipts', icon: <Receipt size={20} />, label: 'Comprob. (Demo)' },
-  { to: '/real-receipts', icon: <Receipt size={20} />, label: 'Comprob. (BD)' },
+  { to: '/orders', icon: <ShoppingCart size={20} />, label: 'Pedidos' },
+  { to: '/receipts', icon: <Receipt size={20} />, label: 'Comprobantes' },
   { to: '/analytics', icon: <BarChart3 size={20} />, label: 'Estadísticas' },
   { to: '/settings', icon: <Settings size={20} />, label: 'Configuración' },
 ];

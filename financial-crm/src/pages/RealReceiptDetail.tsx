@@ -142,7 +142,7 @@ export function RealReceiptDetail() {
             {error || 'Comprobante no encontrado'}
           </h3>
           <div className="flex gap-3 justify-center mt-4">
-            <Button variant="secondary" onClick={() => navigate('/real-receipts')}>
+            <Button variant="secondary" onClick={() => navigate('/receipts')}>
               Volver
             </Button>
             <Button onClick={loadComprobante}>Reintentar</Button>
@@ -160,7 +160,7 @@ export function RealReceiptDetail() {
         title={
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate('/real-receipts')}
+              onClick={() => navigate('/receipts')}
               className="p-1 -ml-1 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg transition-colors"
             >
               <ArrowLeft size={20} />
@@ -377,7 +377,7 @@ export function RealReceiptDetail() {
               </h3>
               <div className="space-y-3">
                 <button
-                  onClick={() => navigate(`/real-orders/${comprobante.order_number}`)}
+                  onClick={() => navigate(`/orders/${comprobante.order_number}`)}
                   className="w-full p-3 bg-neutral-50 rounded-xl text-left hover:bg-neutral-100 transition-colors"
                 >
                   <p className="font-mono text-sm font-medium text-blue-600">

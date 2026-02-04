@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/layout';
-import { Dashboard, Orders, OrderDetail, RealOrders, RealOrderDetail, Receipts, RealReceipts, RealReceiptDetail, Analytics, Settings } from './pages';
+import { Dashboard, RealOrders, RealOrderDetail, RealReceipts, RealReceiptDetail, Analytics, Settings } from './pages';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginPage } from './pages/LoginPage';
 
@@ -15,13 +15,10 @@ function AppRoutes() {
     <Layout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/orders" element={<Orders />} />
-        <Route path="/orders/:id" element={<OrderDetail />} />
-        <Route path="/real-orders" element={<RealOrders />} />
-        <Route path="/real-orders/:orderNumber" element={<RealOrderDetail />} />
-        <Route path="/receipts" element={<Receipts />} />
-        <Route path="/real-receipts" element={<RealReceipts />} />
-        <Route path="/real-receipts/:id" element={<RealReceiptDetail />} />
+        <Route path="/orders" element={<RealOrders />} />
+        <Route path="/orders/:orderNumber" element={<RealOrderDetail />} />
+        <Route path="/receipts" element={<RealReceipts />} />
+        <Route path="/receipts/:id" element={<RealReceiptDetail />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>

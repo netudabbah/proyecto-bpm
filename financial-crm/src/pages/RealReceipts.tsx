@@ -105,15 +105,6 @@ function EstadoBadge({ estado }: { estado: string | null }) {
 }
 
 function ComprobanteCard({ comp, onClick }: { comp: ApiComprobanteList; onClick: () => void }) {
-  const formatCurrency = (amount: number | null) => {
-    if (amount === null) return 'N/D';
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   return (
     <div
       className={clsx(

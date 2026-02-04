@@ -161,7 +161,7 @@ function ComprobanteCard({ comp, onClick }: { comp: ApiComprobanteList; onClick:
       <div className="p-4">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-neutral-900">
-            {formatCurrency(comp.monto)}
+            #{comp.id}
           </span>
           <EstadoBadge estado={comp.estado} />
         </div>

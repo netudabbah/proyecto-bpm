@@ -152,6 +152,8 @@ export function mapEstadoPago(estadoPago: string | null): 'pendiente' | 'a_confi
   if (!estadoPago) return 'pendiente';
 
   switch (estadoPago) {
+    case 'a_confirmar':
+      return 'a_confirmar';
     case 'confirmado_total':
       return 'total';
     case 'confirmado_parcial':

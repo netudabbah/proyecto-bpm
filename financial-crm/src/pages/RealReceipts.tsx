@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RefreshCw, AlertCircle, Eye, Banknote, FileText, Download, Calendar } from 'lucide-react';
 import { Header } from '../components/layout';
-import { Button, Card } from '../components/ui';
-import { fetchComprobantes, ApiComprobanteList } from '../services/api';
+import { Button, Card, PaymentStatusBadge } from '../components/ui';
+import { fetchComprobantes, ApiComprobanteList, PaymentStatus, mapEstadoPago } from '../services/api';
 import { formatDistanceToNow, format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { clsx } from 'clsx';
@@ -14,7 +14,10 @@ async function downloadPendingAsZip(
   comprobantes: ApiComprobanteList[],
   setDownloading: (v: boolean) => void
 ) {
-  const pendientes = comprobantes.filter(c => c.estado === 'pendiente' && c.file_url);
+  // Descargar comprobantes que están "a_confirmar" (pendientes de revisión)
+  const pendientes = comprobantes.filter(c =>
+    (c.estado === 'pendiente' || c.estado === 'a_confirmar') && c.file_url
+  );
 
   if (pendientes.length === 0) {
     alert('No hay comprobantes pendientes con imagen para descargar');
@@ -59,12 +62,12 @@ async function downloadPendingAsZip(
   }
 }
 
-type ComprobanteEstado = 'pendiente' | 'confirmado' | 'rechazado';
-
-const estadoButtons: { value: ComprobanteEstado | 'all'; label: string; color: string }[] = [
+const paymentButtons: { value: PaymentStatus | 'all'; label: string; color: string }[] = [
   { value: 'all', label: 'Todos', color: 'bg-neutral-100 text-neutral-700' },
   { value: 'pendiente', label: 'Pendiente', color: 'bg-amber-50 text-amber-700' },
-  { value: 'confirmado', label: 'Confirmado', color: 'bg-emerald-50 text-emerald-700' },
+  { value: 'a_confirmar', label: 'A confirmar', color: 'bg-blue-50 text-blue-700' },
+  { value: 'parcial', label: 'Parcial', color: 'bg-violet-50 text-violet-700' },
+  { value: 'total', label: 'Total', color: 'bg-emerald-50 text-emerald-700' },
   { value: 'rechazado', label: 'Rechazado', color: 'bg-red-50 text-red-700' },
 ];
 
@@ -73,22 +76,6 @@ const tipoButtons: { value: string | 'all'; label: string }[] = [
   { value: 'transferencia', label: 'Transferencia' },
   { value: 'efectivo', label: 'Efectivo' },
 ];
-
-function EstadoBadge({ estado }: { estado: string | null }) {
-  const estadoMap: Record<string, { label: string; className: string }> = {
-    pendiente: { label: 'Pendiente', className: 'bg-amber-50 text-amber-700' },
-    confirmado: { label: 'Confirmado', className: 'bg-emerald-50 text-emerald-700' },
-    rechazado: { label: 'Rechazado', className: 'bg-red-50 text-red-700' },
-  };
-
-  const info = estadoMap[estado || 'pendiente'] || estadoMap.pendiente;
-
-  return (
-    <span className={clsx('px-2 py-0.5 rounded-full text-xs font-medium', info.className)}>
-      {info.label}
-    </span>
-  );
-}
 
 function ComprobanteCard({ comp, onClick }: { comp: ApiComprobanteList; onClick: () => void }) {
   const formatCurrency = (amount: number | null) => {
@@ -99,6 +86,9 @@ function ComprobanteCard({ comp, onClick }: { comp: ApiComprobanteList; onClick:
       maximumFractionDigits: 0,
     }).format(amount);
   };
+
+  // Mapear estado del pedido para mostrar en el badge
+  const paymentStatus = mapEstadoPago(comp.orden_estado_pago);
 
   return (
     <div
@@ -149,7 +139,7 @@ function ComprobanteCard({ comp, onClick }: { comp: ApiComprobanteList; onClick:
           <span className="text-sm font-medium text-neutral-900">
             {formatCurrency(comp.monto)}
           </span>
-          <EstadoBadge estado={comp.estado} />
+          <PaymentStatusBadge status={paymentStatus} size="sm" />
         </div>
         <div className="flex items-center justify-between">
           <span className="text-xs text-neutral-500">
@@ -169,7 +159,7 @@ export function RealReceipts() {
   const [comprobantes, setComprobantes] = useState<ApiComprobanteList[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [estadoFilter, setEstadoFilter] = useState<ComprobanteEstado | 'all'>('all');
+  const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | 'all'>('all');
   const [tipoFilter, setTipoFilter] = useState<string | 'all'>('all');
   const [fechaFilter, setFechaFilter] = useState<'all' | 'hoy'>('all');
   const [downloading, setDownloading] = useState(false);
@@ -193,24 +183,26 @@ export function RealReceipts() {
 
   const filteredComprobantes = useMemo(() => {
     return comprobantes.filter((comp) => {
-      const matchesEstado = estadoFilter === 'all' || comp.estado === estadoFilter;
+      const paymentStatus = mapEstadoPago(comp.orden_estado_pago);
+      const matchesPayment = paymentFilter === 'all' || paymentStatus === paymentFilter;
       const matchesTipo = tipoFilter === 'all' ||
         (tipoFilter === 'efectivo' && comp.tipo === 'efectivo') ||
         (tipoFilter === 'transferencia' && comp.tipo !== 'efectivo');
       const matchesFecha = fechaFilter === 'all' || isToday(new Date(comp.created_at));
 
-      return matchesEstado && matchesTipo && matchesFecha;
+      return matchesPayment && matchesTipo && matchesFecha;
     });
-  }, [comprobantes, estadoFilter, tipoFilter, fechaFilter]);
+  }, [comprobantes, paymentFilter, tipoFilter, fechaFilter]);
 
-  const estadoCounts = useMemo(() => {
+  const statusCounts = useMemo(() => {
     const filtered = fechaFilter === 'hoy'
       ? comprobantes.filter(c => isToday(new Date(c.created_at)))
       : comprobantes;
 
     return filtered.reduce(
       (acc, comp) => {
-        acc[comp.estado] = (acc[comp.estado] || 0) + 1;
+        const status = mapEstadoPago(comp.orden_estado_pago);
+        acc[status] = (acc[status] || 0) + 1;
         acc.total += 1;
         return acc;
       },
@@ -222,16 +214,16 @@ export function RealReceipts() {
     <div className="min-h-screen">
       <Header
         title="Comprobantes"
-        subtitle={`${estadoCounts.total} comprobantes · ${estadoCounts.pendiente || 0} pendientes de revisión`}
+        subtitle={`${statusCounts.total} comprobantes · ${statusCounts.a_confirmar || 0} a confirmar`}
         actions={
           <div className="flex items-center gap-2">
             <Button
               variant="secondary"
               leftIcon={<Download size={16} className={downloading ? 'animate-bounce' : ''} />}
               onClick={() => downloadPendingAsZip(filteredComprobantes, setDownloading)}
-              disabled={loading || downloading || (estadoCounts.pendiente || 0) === 0}
+              disabled={loading || downloading || (statusCounts.a_confirmar || 0) === 0}
             >
-              {downloading ? 'Descargando...' : `Descargar Imágenes (${estadoCounts.pendiente || 0})`}
+              {downloading ? 'Descargando...' : `Descargar Imágenes (${statusCounts.a_confirmar || 0})`}
             </Button>
             <Button
               variant="secondary"
@@ -278,17 +270,17 @@ export function RealReceipts() {
             </div>
           </div>
 
-          {/* Filtro de estado */}
+          {/* Filtro de estado de pago */}
           <div>
-            <span className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2 block">Estado</span>
+            <span className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2 block">Estado de Pago</span>
             <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0">
-              {estadoButtons.map((btn) => (
+              {paymentButtons.map((btn) => (
                 <button
                   key={btn.value}
-                  onClick={() => setEstadoFilter(btn.value)}
+                  onClick={() => setPaymentFilter(btn.value)}
                   className={clsx(
                     'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap',
-                    estadoFilter === btn.value
+                    paymentFilter === btn.value
                       ? clsx(btn.color, 'ring-2 ring-neutral-900/10')
                       : 'bg-white text-neutral-600 hover:bg-neutral-50 border border-neutral-200'
                   )}

@@ -1197,8 +1197,8 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     ================================ */
     const insert = await pool.query(
       `insert into comprobantes
-       (order_number, hash_ocr, texto_ocr, monto, monto_tiendanube, file_url)
-       values ($1,$2,$3,$4,$5,$6)
+       (order_number, hash_ocr, texto_ocr, monto, monto_tiendanube, file_url, estado)
+       values ($1,$2,$3,$4,$5,$6,'a_confirmar')
        returning id`,
       [
         orderNumber,
@@ -1340,6 +1340,16 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     await pool.query(
       `update comprobantes set cuenta = $2 where id = $1`,
       [comprobanteId, cuentaActual]
+    );
+
+    /* ===============================
+       1️⃣4️⃣ UPDATE ESTADO PEDIDO A "A CONFIRMAR"
+    ================================ */
+    await pool.query(
+      `update orders_validated
+       set estado_pago = 'a_confirmar'
+       where order_number = $1 and estado_pago = 'pendiente'`,
+      [orderNumber]
     );
 
     /* ===============================

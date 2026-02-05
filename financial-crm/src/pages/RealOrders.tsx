@@ -12,7 +12,7 @@ import {
   TableCell,
 } from '../components/ui';
 import { fetchOrders, ApiOrder, mapEstadoPago, mapEstadoPedido, PaymentStatus, OrderStatus } from '../services/api';
-import { formatDistanceToNow, isToday } from 'date-fns';
+import { format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { clsx } from 'clsx';
 
@@ -315,7 +315,7 @@ export function RealOrders() {
                     </TableCell>
                     <TableCell>
                       <span className="text-xs text-neutral-500">
-                        {formatDistanceToNow(new Date(order.created_at), { addSuffix: true, locale: es })}
+                        {format(new Date(order.created_at), 'dd/MM/yyyy HH:mm', { locale: es })}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">

@@ -44,24 +44,57 @@ function NavItem({ to, icon, label, collapsed }: NavItemProps) {
   );
 }
 
+// Cada item tiene permisos requeridos (si tiene alguno de ellos, se muestra)
 const navItems = [
-  { to: '/', icon: <LayoutDashboard size={20} />, label: 'Panel' },
-  { to: '/orders', icon: <ShoppingCart size={20} />, label: 'Pedidos' },
-  { to: '/receipts', icon: <Receipt size={20} />, label: 'Comprobantes' },
-  { to: '/analytics', icon: <BarChart3 size={20} />, label: 'Estadísticas' },
-  { to: '/settings', icon: <Settings size={20} />, label: 'Configuración' },
+  {
+    to: '/',
+    icon: <LayoutDashboard size={20} />,
+    label: 'Panel',
+    permissions: ['dashboard.view']
+  },
+  {
+    to: '/orders',
+    icon: <ShoppingCart size={20} />,
+    label: 'Pedidos',
+    permissions: ['orders.view', 'orders.print', 'orders.update_status', 'orders.create_cash_payment']
+  },
+  {
+    to: '/receipts',
+    icon: <Receipt size={20} />,
+    label: 'Comprobantes',
+    permissions: ['receipts.view', 'receipts.confirm', 'receipts.reject', 'receipts.download', 'receipts.upload_manual']
+  },
+  {
+    to: '/analytics',
+    icon: <BarChart3 size={20} />,
+    label: 'Estadísticas',
+    permissions: ['dashboard.view'] // Requiere ver dashboard para ver estadísticas
+  },
+  {
+    to: '/settings',
+    icon: <Settings size={20} />,
+    label: 'Configuración',
+    permissions: [] // Siempre visible
+  },
 ];
 
 const adminItems = [
-  { to: '/admin/roles', icon: <Shield size={20} />, label: 'Roles', permission: 'users.view' },
-  { to: '/admin/users', icon: <Users size={20} />, label: 'Usuarios', permission: 'users.view' },
+  { to: '/admin/roles', icon: <Shield size={20} />, label: 'Roles', permissions: ['users.view'] },
+  { to: '/admin/users', icon: <Users size={20} />, label: 'Usuarios', permissions: ['users.view'] },
 ];
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { logout, hasPermission } = useAuth();
 
-  const visibleAdminItems = adminItems.filter(item => hasPermission(item.permission));
+  // Filtrar items según permisos (si permissions está vacío, siempre se muestra)
+  const hasAnyPermission = (permissions: string[]) => {
+    if (permissions.length === 0) return true;
+    return permissions.some(p => hasPermission(p));
+  };
+
+  const visibleNavItems = navItems.filter(item => hasAnyPermission(item.permissions));
+  const visibleAdminItems = adminItems.filter(item => hasAnyPermission(item.permissions));
 
   return (
     <aside
@@ -89,8 +122,8 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {navItems.map((item) => (
-          <NavItem key={item.to} {...item} collapsed={collapsed} />
+        {visibleNavItems.map((item) => (
+          <NavItem key={item.to} to={item.to} icon={item.icon} label={item.label} collapsed={collapsed} />
         ))}
 
         {visibleAdminItems.length > 0 && (

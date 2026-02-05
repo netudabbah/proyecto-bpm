@@ -1,44 +1,48 @@
 import { useState, useEffect } from 'react';
 import { Header } from '../components/layout';
-import { RefreshCw, AlertCircle, Shield, Check, Save } from 'lucide-react';
+import { RefreshCw, AlertCircle, Check, Save, ChevronDown } from 'lucide-react';
 import { fetchRoles, fetchPermissions, updateRolePermissions, Role, Permission } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 const MODULE_LABELS: Record<string, string> = {
-  dashboard: 'Panel',
+  dashboard: 'Dashboard',
   orders: 'Pedidos',
   receipts: 'Comprobantes',
   users: 'Usuarios',
 };
 
 const PERMISSION_LABELS: Record<string, string> = {
-  'dashboard.view': 'Ver panel',
+  'dashboard.view': 'Ver dashboard',
   'orders.view': 'Ver pedidos',
-  'orders.print': 'Imprimir pedidos',
-  'orders.update_status': 'Cambiar estado de pedidos',
+  'orders.print': 'Imprimir pedido',
+  'orders.update_status': 'Cambiar estado logístico',
   'orders.create_cash_payment': 'Registrar pago en efectivo',
   'receipts.view': 'Ver comprobantes',
-  'receipts.download': 'Descargar comprobantes',
-  'receipts.upload_manual': 'Subir comprobante manual',
-  'receipts.confirm': 'Confirmar comprobantes',
-  'receipts.reject': 'Rechazar comprobantes',
+  'receipts.download': 'Descargar imágenes',
+  'receipts.upload_manual': 'Subir manual',
+  'receipts.confirm': 'Confirmar',
+  'receipts.reject': 'Rechazar',
   'users.view': 'Ver usuarios',
-  'users.create': 'Crear usuarios',
-  'users.edit': 'Editar usuarios',
-  'users.disable': 'Desactivar usuarios',
-  'users.assign_role': 'Asignar roles',
+  'users.create': 'Crear',
+  'users.edit': 'Editar',
+  'users.disable': 'Desactivar',
+  'users.assign_role': 'Asignar rol',
 };
+
+const MODULE_ORDER = ['dashboard', 'orders', 'receipts', 'users'];
 
 export function AdminRoles() {
   const { hasPermission } = useAuth();
   const [roles, setRoles] = useState<Role[]>([]);
-  const [permissions, setPermissions] = useState<Record<string, Permission[]>>({});
-  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
+  const [selectedRoleId, setSelectedRoleId] = useState<string>('');
   const [editedPermissions, setEditedPermissions] = useState<string[]>([]);
+  const [originalPermissions, setOriginalPermissions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const canEdit = hasPermission('users.assign_role');
 
@@ -51,10 +55,20 @@ export function AdminRoles() {
         fetchPermissions()
       ]);
       setRoles(rolesData);
-      setPermissions(permissionsData);
-      if (rolesData.length > 0 && !selectedRole) {
-        setSelectedRole(rolesData[0]);
-        setEditedPermissions(rolesData[0].permissions);
+
+      // Flatten permissions from grouped object
+      const permsList: Permission[] = [];
+      Object.values(permissionsData).forEach((perms) => {
+        permsList.push(...(perms as Permission[]));
+      });
+      setAllPermissions(permsList);
+
+      // Seleccionar primer rol por defecto
+      if (rolesData.length > 0 && !selectedRoleId) {
+        const firstRole = rolesData[0];
+        setSelectedRoleId(firstRole.id);
+        setEditedPermissions(firstRole.permissions);
+        setOriginalPermissions(firstRole.permissions);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al cargar datos');
@@ -68,9 +82,11 @@ export function AdminRoles() {
   }, []);
 
   const handleSelectRole = (role: Role) => {
-    setSelectedRole(role);
+    setSelectedRoleId(role.id);
     setEditedPermissions(role.permissions);
+    setOriginalPermissions(role.permissions);
     setSuccessMessage(null);
+    setDropdownOpen(false);
   };
 
   const togglePermission = (permissionKey: string) => {
@@ -87,18 +103,16 @@ export function AdminRoles() {
   };
 
   const handleSave = async () => {
-    if (!selectedRole || !canEdit) return;
+    if (!selectedRoleId || !canEdit) return;
 
     setSaving(true);
     setError(null);
     setSuccessMessage(null);
 
     try {
-      const updatedRole = await updateRolePermissions(selectedRole.id, editedPermissions);
-
-      // Actualizar el rol en la lista
+      const updatedRole = await updateRolePermissions(selectedRoleId, editedPermissions);
       setRoles(prev => prev.map(r => r.id === updatedRole.id ? updatedRole : r));
-      setSelectedRole(updatedRole);
+      setOriginalPermissions(editedPermissions);
       setSuccessMessage('Permisos guardados correctamente');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al guardar permisos');
@@ -107,8 +121,17 @@ export function AdminRoles() {
     }
   };
 
-  const hasChanges = selectedRole &&
-    JSON.stringify([...editedPermissions].sort()) !== JSON.stringify([...selectedRole.permissions].sort());
+  const hasChanges = JSON.stringify([...editedPermissions].sort()) !== JSON.stringify([...originalPermissions].sort());
+  const selectedRole = roles.find(r => r.id === selectedRoleId);
+
+  // Agrupar permisos por módulo
+  const permissionsByModule = allPermissions.reduce((acc, perm) => {
+    if (!acc[perm.module]) {
+      acc[perm.module] = [];
+    }
+    acc[perm.module].push(perm);
+    return acc;
+  }, {} as Record<string, Permission[]>);
 
   if (loading) {
     return (
@@ -125,10 +148,7 @@ export function AdminRoles() {
           <AlertCircle size={48} className="mx-auto text-red-400 mb-4" />
           <h3 className="text-lg font-semibold text-neutral-900 mb-2">Error al cargar datos</h3>
           <p className="text-neutral-500 mb-4">{error}</p>
-          <button
-            onClick={loadData}
-            className="px-4 py-2 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800"
-          >
+          <button onClick={loadData} className="px-4 py-2 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800">
             Reintentar
           </button>
         </div>
@@ -138,138 +158,129 @@ export function AdminRoles() {
 
   return (
     <div className="min-h-screen">
-      <Header
-        title="Gestión de Roles"
-        subtitle="Administra los permisos de cada rol"
-        actions={
-          <button
-            onClick={loadData}
-            disabled={loading}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg transition-colors"
-          >
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-            Actualizar
-          </button>
-        }
-      />
+      <Header title="Permisos por Rol" subtitle="Configura los permisos de cada rol del sistema" />
 
-      <div className="p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Lista de roles */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-2xl border border-neutral-200/60 p-4 shadow-soft">
-              <h3 className="text-sm font-semibold text-neutral-700 mb-3">Roles</h3>
-              <div className="space-y-2">
+      <div className="p-6 max-w-2xl mx-auto">
+        {/* Selector de rol */}
+        <div className="mb-8">
+          <label className="block text-sm font-semibold text-neutral-600 mb-2 uppercase tracking-wide">
+            Rol:
+          </label>
+          <div className="relative">
+            <button
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-white border border-neutral-200 rounded-xl text-left hover:border-neutral-300 transition-colors"
+            >
+              <span className="font-medium text-neutral-900 capitalize">
+                {selectedRole?.name || 'Seleccionar rol'}
+              </span>
+              <ChevronDown size={20} className={`text-neutral-400 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {dropdownOpen && (
+              <div className="absolute z-10 w-full mt-2 bg-white border border-neutral-200 rounded-xl shadow-lg overflow-hidden">
                 {roles.map(role => (
                   <button
                     key={role.id}
                     onClick={() => handleSelectRole(role)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
-                      selectedRole?.id === role.id
-                        ? 'bg-neutral-900 text-white'
-                        : 'hover:bg-neutral-100 text-neutral-700'
+                    className={`w-full px-4 py-3 text-left hover:bg-neutral-50 transition-colors capitalize ${
+                      role.id === selectedRoleId ? 'bg-neutral-100 font-medium' : ''
                     }`}
                   >
-                    <Shield size={18} />
-                    <span className="font-medium capitalize">{role.name}</span>
+                    {role.name}
                   </button>
                 ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Editor de permisos */}
-          <div className="lg:col-span-3">
-            {selectedRole ? (
-              <div className="bg-white rounded-2xl border border-neutral-200/60 p-6 shadow-soft">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="text-lg font-semibold text-neutral-900 capitalize">
-                      Rol: {selectedRole.name}
-                    </h2>
-                    <p className="text-sm text-neutral-500">
-                      {editedPermissions.length} permisos asignados
-                    </p>
-                  </div>
-                  {canEdit && (
-                    <button
-                      onClick={handleSave}
-                      disabled={!hasChanges || saving}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                        hasChanges && !saving
-                          ? 'bg-neutral-900 text-white hover:bg-neutral-800'
-                          : 'bg-neutral-100 text-neutral-400 cursor-not-allowed'
-                      }`}
-                    >
-                      <Save size={18} />
-                      {saving ? 'Guardando...' : 'Guardar cambios'}
-                    </button>
-                  )}
-                </div>
-
-                {error && (
-                  <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm">
-                    {error}
-                  </div>
-                )}
-
-                {successMessage && (
-                  <div className="mb-4 p-3 bg-green-50 text-green-600 rounded-lg text-sm flex items-center gap-2">
-                    <Check size={16} />
-                    {successMessage}
-                  </div>
-                )}
-
-                <div className="space-y-6">
-                  {Object.entries(permissions).map(([module, modulePermissions]) => (
-                    <div key={module}>
-                      <h4 className="text-sm font-semibold text-neutral-700 mb-3 uppercase tracking-wider">
-                        {MODULE_LABELS[module] || module}
-                      </h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {modulePermissions.map(permission => {
-                          const isChecked = editedPermissions.includes(permission.key);
-                          return (
-                            <label
-                              key={permission.id}
-                              className={`flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer ${
-                                isChecked
-                                  ? 'border-neutral-900 bg-neutral-50'
-                                  : 'border-neutral-200 hover:border-neutral-300'
-                              } ${!canEdit ? 'opacity-60 cursor-not-allowed' : ''}`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={() => togglePermission(permission.key)}
-                                disabled={!canEdit}
-                                className="w-4 h-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900"
-                              />
-                              <span className="text-sm text-neutral-700">
-                                {PERMISSION_LABELS[permission.key] || permission.key}
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {!canEdit && (
-                  <div className="mt-6 p-4 bg-amber-50 text-amber-700 rounded-lg text-sm">
-                    No tienes permiso para editar roles. Contacta al administrador.
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl border border-neutral-200/60 p-8 text-center shadow-soft">
-                <Shield size={48} className="mx-auto text-neutral-300 mb-4" />
-                <p className="text-neutral-500">Selecciona un rol para ver sus permisos</p>
               </div>
             )}
           </div>
         </div>
+
+        <hr className="border-neutral-200 mb-8" />
+
+        {/* Mensajes */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-xl text-sm">
+            {error}
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="mb-6 p-4 bg-green-50 text-green-600 rounded-xl text-sm flex items-center gap-2">
+            <Check size={18} />
+            {successMessage}
+          </div>
+        )}
+
+        {/* Lista de permisos por módulo */}
+        {selectedRole && (
+          <div className="space-y-8">
+            {MODULE_ORDER.map(module => {
+              const modulePerms = permissionsByModule[module];
+              if (!modulePerms || modulePerms.length === 0) return null;
+
+              return (
+                <div key={module}>
+                  <h3 className="text-sm font-semibold text-neutral-900 mb-4">
+                    {MODULE_LABELS[module] || module}
+                  </h3>
+                  <div className="space-y-3 pl-1">
+                    {modulePerms.map(permission => {
+                      const isChecked = editedPermissions.includes(permission.key);
+                      return (
+                        <label
+                          key={permission.id}
+                          className={`flex items-center gap-3 cursor-pointer py-1 ${!canEdit ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => togglePermission(permission.key)}
+                            disabled={!canEdit}
+                            className="w-5 h-5 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900 focus:ring-offset-0"
+                          />
+                          <span className="text-neutral-700">
+                            {PERMISSION_LABELS[permission.key] || permission.key}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Botón guardar */}
+            {canEdit && (
+              <button
+                onClick={handleSave}
+                disabled={!hasChanges || saving}
+                className={`w-full flex items-center justify-center gap-2 py-4 rounded-xl font-medium text-lg transition-all mt-8 ${
+                  hasChanges && !saving
+                    ? 'bg-neutral-900 text-white hover:bg-neutral-800'
+                    : 'bg-neutral-100 text-neutral-400 cursor-not-allowed'
+                }`}
+              >
+                {saving ? (
+                  <>
+                    <RefreshCw size={20} className="animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save size={20} />
+                    Guardar cambios
+                  </>
+                )}
+              </button>
+            )}
+
+            {!canEdit && (
+              <div className="p-4 bg-amber-50 text-amber-700 rounded-xl text-sm text-center mt-8">
+                No tienes permiso para editar roles. Contacta al administrador.
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

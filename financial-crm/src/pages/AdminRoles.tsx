@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Header } from '../components/layout';
 import { RefreshCw, AlertCircle, Check, Save, ChevronDown, LayoutDashboard, ShoppingCart, Receipt, Users } from 'lucide-react';
-import { fetchRoles, fetchPermissions, updateRolePermissions, Role, Permission } from '../services/api';
+import { fetchRoles, updateRolePermissions, Role } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 const PERMISSION_LABELS: Record<string, string> = {
@@ -90,7 +90,6 @@ const SECTIONS = [
 export function AdminRoles() {
   const { hasPermission } = useAuth();
   const [roles, setRoles] = useState<Role[]>([]);
-  const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState<string>('');
   const [editedPermissions, setEditedPermissions] = useState<string[]>([]);
   const [originalPermissions, setOriginalPermissions] = useState<string[]>([]);
@@ -106,18 +105,8 @@ export function AdminRoles() {
     setLoading(true);
     setError(null);
     try {
-      const [rolesData, permissionsData] = await Promise.all([
-        fetchRoles(),
-        fetchPermissions()
-      ]);
+      const rolesData = await fetchRoles();
       setRoles(rolesData);
-
-      // Flatten permissions from grouped object
-      const permsList: Permission[] = [];
-      Object.values(permissionsData).forEach((perms) => {
-        permsList.push(...(perms as Permission[]));
-      });
-      setAllPermissions(permsList);
 
       // Seleccionar primer rol por defecto
       if (rolesData.length > 0 && !selectedRoleId) {

@@ -6,22 +6,47 @@ import { useAuth } from '../contexts/AuthContext';
 
 const MODULE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
-  orders: 'Pedidos',
-  receipts: 'Comprobantes',
+  orders: 'Pedidos (General)',
+  orders_pago: 'Pedidos - Estados de Pago',
+  orders_estado: 'Pedidos - Estados Logísticos',
+  receipts: 'Comprobantes (General)',
+  receipts_estado: 'Comprobantes - Estados',
   users: 'Usuarios',
 };
 
 const PERMISSION_LABELS: Record<string, string> = {
   'dashboard.view': 'Ver dashboard',
+  // Orders general
   'orders.view': 'Ver pedidos',
   'orders.print': 'Imprimir pedido',
   'orders.update_status': 'Cambiar estado logístico',
   'orders.create_cash_payment': 'Registrar pago en efectivo',
+  // Orders por estado de pago
+  'orders.view_pendiente': 'Ver pendientes de pago',
+  'orders.view_a_confirmar': 'Ver a confirmar',
+  'orders.view_parcial': 'Ver pago parcial',
+  'orders.view_total': 'Ver pago total',
+  'orders.view_rechazado': 'Ver rechazados',
+  // Orders por estado de pedido
+  'orders.view_pendiente_pago': 'Ver pendiente de pago',
+  'orders.view_a_imprimir': 'Ver a imprimir',
+  'orders.view_armado': 'Ver armados',
+  'orders.view_enviado': 'Ver enviados',
+  'orders.view_en_calle': 'Ver en calle',
+  'orders.view_retirado': 'Ver retirados',
+  // Receipts general
   'receipts.view': 'Ver comprobantes',
   'receipts.download': 'Descargar imágenes',
   'receipts.upload_manual': 'Subir manual',
   'receipts.confirm': 'Confirmar',
   'receipts.reject': 'Rechazar',
+  // Receipts por estado
+  'receipts.view_pendiente': 'Ver pendientes',
+  'receipts.view_a_confirmar': 'Ver a confirmar',
+  'receipts.view_parcial': 'Ver parciales',
+  'receipts.view_total': 'Ver totales',
+  'receipts.view_rechazado': 'Ver rechazados',
+  // Users
   'users.view': 'Ver usuarios',
   'users.create': 'Crear',
   'users.edit': 'Editar',
@@ -29,7 +54,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'users.assign_role': 'Asignar rol',
 };
 
-const MODULE_ORDER = ['dashboard', 'orders', 'receipts', 'users'];
+const MODULE_ORDER = ['dashboard', 'orders', 'orders_pago', 'orders_estado', 'receipts', 'receipts_estado', 'users'];
 
 export function AdminRoles() {
   const { hasPermission } = useAuth();

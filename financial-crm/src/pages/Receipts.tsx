@@ -6,25 +6,48 @@ import { getAllReceipts } from '../data/mockData';
 import { Receipt, PaymentStatus } from '../types';
 import { Search } from 'lucide-react';
 import { clsx } from 'clsx';
+import { useAuth } from '../contexts/AuthContext';
 
-const statusFilters: { value: PaymentStatus | 'all'; label: string; color: string }[] = [
+// Mapeo de estados a permisos
+const receiptStatusPermissions: Record<PaymentStatus, string> = {
+  pendiente: 'receipts.view_pendiente',
+  a_confirmar: 'receipts.view_a_confirmar',
+  parcial: 'receipts.view_parcial',
+  total: 'receipts.view_total',
+  rechazado: 'receipts.view_rechazado',
+};
+
+const statusFilters: { value: PaymentStatus | 'all'; label: string; color: string; permission?: string }[] = [
   { value: 'all', label: 'Todos', color: 'bg-neutral-100 text-neutral-700' },
-  { value: 'pendiente', label: 'Pendiente', color: 'bg-amber-50 text-amber-700' },
-  { value: 'a_confirmar', label: 'A confirmar', color: 'bg-blue-50 text-blue-700' },
-  { value: 'parcial', label: 'Parcial', color: 'bg-violet-50 text-violet-700' },
-  { value: 'total', label: 'Total', color: 'bg-emerald-50 text-emerald-700' },
-  { value: 'rechazado', label: 'Rechazado', color: 'bg-red-50 text-red-700' },
+  { value: 'pendiente', label: 'Pendiente', color: 'bg-amber-50 text-amber-700', permission: 'receipts.view_pendiente' },
+  { value: 'a_confirmar', label: 'A confirmar', color: 'bg-blue-50 text-blue-700', permission: 'receipts.view_a_confirmar' },
+  { value: 'parcial', label: 'Parcial', color: 'bg-violet-50 text-violet-700', permission: 'receipts.view_parcial' },
+  { value: 'total', label: 'Total', color: 'bg-emerald-50 text-emerald-700', permission: 'receipts.view_total' },
+  { value: 'rechazado', label: 'Rechazado', color: 'bg-red-50 text-red-700', permission: 'receipts.view_rechazado' },
 ];
 
 export function Receipts() {
+  const { hasPermission } = useAuth();
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'all'>('all');
   const [search, setSearch] = useState('');
 
   const receipts = getAllReceipts();
 
-  const filteredReceipts = useMemo(() => {
+  // Filtrar comprobantes según permisos del usuario
+  const permittedReceipts = useMemo(() => {
     return receipts.filter((receipt) => {
+      return hasPermission(receiptStatusPermissions[receipt.paymentStatus]);
+    });
+  }, [receipts, hasPermission]);
+
+  // Filtrar botones de estado según permisos
+  const visibleStatusFilters = statusFilters.filter(filter =>
+    filter.value === 'all' || !filter.permission || hasPermission(filter.permission)
+  );
+
+  const filteredReceipts = useMemo(() => {
+    return permittedReceipts.filter((receipt) => {
       const matchesStatus = statusFilter === 'all' || receipt.paymentStatus === statusFilter;
       const matchesSearch =
         search === '' ||
@@ -33,10 +56,10 @@ export function Receipts() {
 
       return matchesStatus && matchesSearch;
     });
-  }, [receipts, statusFilter, search]);
+  }, [permittedReceipts, statusFilter, search]);
 
   const statusCounts = useMemo(() => {
-    return receipts.reduce(
+    return permittedReceipts.reduce(
       (acc, receipt) => {
         acc[receipt.paymentStatus] = (acc[receipt.paymentStatus] || 0) + 1;
         acc.total += 1;
@@ -44,7 +67,7 @@ export function Receipts() {
       },
       { total: 0 } as Record<string, number>
     );
-  }, [receipts]);
+  }, [permittedReceipts]);
 
   return (
     <div className="min-h-screen">
@@ -55,25 +78,27 @@ export function Receipts() {
 
       <div className="p-6 space-y-6">
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0">
-            {statusFilters.map((filter) => (
-              <button
-                key={filter.value}
-                onClick={() => setStatusFilter(filter.value)}
-                className={clsx(
-                  'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap',
-                  statusFilter === filter.value
-                    ? clsx(filter.color, 'ring-2 ring-neutral-900/10')
-                    : 'bg-white text-neutral-600 hover:bg-neutral-50 border border-neutral-200'
-                )}
-              >
-                {filter.label}
-                <span className="ml-1.5 text-xs opacity-60">
-                  {filter.value === 'all' ? statusCounts.total : statusCounts[filter.value] || 0}
-                </span>
-              </button>
-            ))}
-          </div>
+          {visibleStatusFilters.length > 1 && (
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0">
+              {visibleStatusFilters.map((filter) => (
+                <button
+                  key={filter.value}
+                  onClick={() => setStatusFilter(filter.value)}
+                  className={clsx(
+                    'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap',
+                    statusFilter === filter.value
+                      ? clsx(filter.color, 'ring-2 ring-neutral-900/10')
+                      : 'bg-white text-neutral-600 hover:bg-neutral-50 border border-neutral-200'
+                  )}
+                >
+                  {filter.label}
+                  <span className="ml-1.5 text-xs opacity-60">
+                    {filter.value === 'all' ? statusCounts.total : statusCounts[filter.value] || 0}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
 
           <Input
             placeholder="Buscar comprobantes..."
